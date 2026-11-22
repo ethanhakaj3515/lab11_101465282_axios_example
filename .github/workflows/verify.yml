@@ -1,0 +1,44 @@
+name: Verify lab
+on:
+  push:
+    paths: ['.github/workflows/verify.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run build
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - name: Capture the live directory
+        run: |
+          npm run preview -- --host 127.0.0.1 &
+          for i in {1..20}; do
+            curl -fsS http://127.0.0.1:4173/ > /dev/null && break
+            sleep 1
+          done
+          node --input-type=module <<'JS'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch();
+          try {
+            const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
+            await page.goto('http://127.0.0.1:4173');
+            await page.getByRole('heading', { name: 'People directory' }).waitFor();
+            await page.locator('.card').nth(9).waitFor({ timeout: 30000 });
+            await page.screenshot({ path: 'comp3123-lab9-output.png', fullPage: true });
+          } finally {
+            await browser.close();
+          }
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comp3123-lab9-output
+          path: comp3123-lab9-output.png
